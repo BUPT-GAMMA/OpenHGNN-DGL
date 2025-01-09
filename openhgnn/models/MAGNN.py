@@ -11,7 +11,7 @@ import torch.nn.functional as F
 from dgl.utils import expand_as_pair
 from operator import itemgetter
 from . import BaseModel, register_model
-
+import random
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import f1_score
 from sklearn.svm import LinearSVC
@@ -67,21 +67,28 @@ class MAGNN(BaseModel):
     @classmethod
     def build_model_from_args(cls, args, hg):
         ntypes = hg.ntypes
-        if args.dataset == 'imdb4MAGNN':
-            # build model
-            metapath_list = ['M-D-M', 'M-A-M', 'D-M-D', 'D-M-A-M-D', 'A-M-A', 'A-M-D-M-A']
-            edge_type_list = ['A-M', 'M-A', 'D-M', 'M-D']
-            # in_feats: {'n1type': n1_dim, 'n2type', n2_dim, ...}
-            in_feats = {'M': 3066, 'D': 2081, 'A': 5257}
+        dataset_list = ['imdb4MAGNN','dblp4MAGNN']
+        if args.dataset in dataset_list:
+            edge_type_list = hg.etypes
+            metapath_list = []
+            metapath_list = metapath_list + metapath_generator(ntypes,edge_type_list,5,2)
+            metapath_list = metapath_list + metapath_generator(ntypes,edge_type_list,3,2)
             metapath_idx_dict = mp_instance_sampler(hg, metapath_list, 'imdb4MAGNN')
-
-        elif args.dataset == 'dblp4MAGNN':
-            # build model
-            metapath_list = ['A-P-A', 'A-P-T-P-A', 'A-P-V-P-A']
-            edge_type_list = ['A-P', 'P-A', 'P-T', 'T-P', 'P-V', 'V-P']
-            # in_feats: {'n1type': n1_dim, 'n2type', n2_dim, ...}
-            in_feats = {'A': 334, 'P': 14328, 'T': 7723, 'V': 20}
-            metapath_idx_dict = mp_instance_sampler(hg, metapath_list, 'dblp4MAGNN')
+        # if args.dataset == 'imdb4MAGNN':
+        #     # build model
+        #     metapath_list = ['M-D-M', 'M-A-M', 'D-M-D', 'D-M-A-M-D', 'A-M-A', 'A-M-D-M-A']
+        #     edge_type_list = hg.etypes
+        #     # in_feats: {'n1type': n1_dim, 'n2type', n2_dim, ...}
+        #     in_feats = {'M': 3066, 'D': 2081, 'A': 5257}
+        #     metapath_idx_dict = mp_instance_sampler(hg, metapath_list, 'imdb4MAGNN')
+        #
+        # elif args.dataset == 'dblp4MAGNN':
+        #     # build model
+        #     metapath_list = ['A-P-A', 'A-P-T-P-A', 'A-P-V-P-A']
+        #     edge_type_list = ['A-P', 'P-A', 'P-T', 'T-P', 'P-V', 'V-P']
+        #     # in_feats: {'n1type': n1_dim, 'n2type', n2_dim, ...}
+        #     in_feats = {'A': 334, 'P': 14328, 'T': 7723, 'V': 20}
+        #     metapath_idx_dict = mp_instance_sampler(hg, metapath_list, 'dblp4MAGNN')
 
         else:
             raise NotImplementedError("MAGNN on dataset {} has not been implemented".format(args.dataset))
@@ -190,8 +197,8 @@ class MAGNN(BaseModel):
         feat_dict : dict
             the feature matrix dict of different node types, e.g {'M':feat_of_M, 'D':feat_of_D, ...}
 
-        Returns
         -------
+        Returns
         dict
             The predicted logit after the output projection. e.g For the predicted node type, such as M(movie),
             dict['M'] contains the probability that each node is classified as each class. For other node types, such as
@@ -591,3 +598,23 @@ def svm_test(X, y, test_sizes=(0.2, 0.4, 0.6, 0.8), repeat=10):
         result_macro_f1_list.append((np.mean(macro_f1_list), np.std(macro_f1_list)))
         result_micro_f1_list.append((np.mean(micro_f1_list), np.std(micro_f1_list)))
     return result_macro_f1_list, result_micro_f1_list
+
+
+def metapath_generator(ntypes,etypes,length,num):
+    ntypes_num = len(ntypes)
+    metapath_list = []
+    for i in range(num):
+        temp = ""
+        random_index = random.randrange(ntypes_num)
+        temp = temp + ntypes[random_index]
+        for j in range(length-1):
+            temp = temp + '-'
+            random_index = random.randrange(ntypes_num)
+            temp_e = temp[-2] + '-' + ntypes[random_index]
+            while temp_e not in etypes:
+                random_index = random.randrange(ntypes_num)
+                temp_e = temp[-2] + '-' + ntypes[random_index]
+            temp = temp + ntypes[random_index]
+        if temp not in metapath_list:
+            metapath_list.append(temp)
+    return metapath_list
